@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NimeStream - Nonton Anime Sub Indo 2026</title>
+    
+    <!-- Meta Tags -->
+    <meta name="description" content="Nonton anime subtitle Indonesia gratis, update setiap hari dari berbagai sumber.">
+    <meta name="keywords" content="nonton anime, anime sub indo, streaming anime, wibu">
+    
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- AOS Animation -->
+    <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Floating Button -->
+    <div class="floating-btn" onclick="scrollToTop()" id="floatBtn">
+        <i class="fas fa-arrow-up"></i>
+    </div>
+
+    <!-- NAVBAR -->
+    <nav class="navbar" data-aos="fade-down">
+        <div class="logo">
+            <i class="fas fa-tv"></i>
+            Wibu<span class="logo-highlight">Stream</span>
+            <span class="version-badge">v2.0</span>
+        </div>
+        
+        <div class="nav-links">
+            <a href="#" onclick="showTab('home')" class="active">
+                <i class="fas fa-home"></i> Home
+            </a>
+            <a href="#" onclick="showTab('ongoing')">
+                <i class="fas fa-fire"></i> Ongoing
+                <span class="hot-badge">HOT</span>
+            </a>
+            <a href="#" onclick="showTab('genres')">
+                <i class="fas fa-tags"></i> Genres
+            </a>
+            <a href="#" onclick="showTab('schedule')">
+                <i class="fas fa-calendar"></i> Jadwal
+            </a>
+        </div>
+        
+        <div class="nav-right">
+            <i class="fas fa-search search-icon" onclick="document.getElementById('searchInput').focus()"></i>
+        </div>
+    </nav>
+
+    <!-- MAIN CONTAINER -->
+    <div class="container">
+        <!-- HERO SECTION -->
+        <section class="hero" data-aos="fade-up">
+            <div class="hero-content">
+                <h1>
+                    <span class="gradient-text">Nonton Anime</span><br>
+                    Subtitle Indonesia
+                </h1>
+                <p class="hero-desc">
+                    <i class="fas fa-check-circle"></i> Update Real-time •
+                    <i class="fas fa-check-circle"></i> Dari Berbagai Sumber •
+                    <i class="fas fa-check-circle"></i> Gratis
+                </p>
+                
+                <!-- SEARCH -->
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="Cari anime (One Piece, Jujutsu, etc)" 
+                           onkeypress="if(event.key==='Enter') searchAnime()">
+                    <button onclick="searchAnime()">
+                        <i class="fas fa-search"></i> Cari
+                    </button>
+                </div>
+                
+                <!-- SOURCE SELECTOR -->
+                <div class="source-selector">
+                    <label><i class="fas fa-database"></i> Sumber:</label>
+                    <select id="sourceSelect" onchange="changeSource()">
+                        <option value="otakudesu">🎌 OtakuDesu</option>
+                        <option value="samehadaku">⚡ Samehadaku</option>
+                        <option value="anoboy">📺 Anoboy</option>
+                    </select>
+                </div>
+                
+                <!-- STATS (auto update dari JS) -->
+                <div class="stats-row" id="statsRow">
+                    <div class="stat-item">
+                        <div class="stat-value" id="totalAnime">0</div>
+                        <div class="stat-label">Anime</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="totalOngoing">0</div>
+                        <div class="stat-label">Ongoing</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="totalGenres">0</div>
+                        <div class="stat-label">Genre</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TABS -->
+        <div class="tabs" data-aos="fade-up">
+            <button class="tab-btn active" onclick="showTab('home')">
+                <i class="fas fa-home"></i> Beranda
+            </button>
+            <button class="tab-btn" onclick="showTab('ongoing')">
+                <i class="fas fa-fire"></i> Ongoing
+            </button>
+            <button class="tab-btn" onclick="showTab('genres')">
+                <i class="fas fa-tags"></i> Genres
+            </button>
+            <button class="tab-btn" onclick="showTab('schedule')">
+                <i class="fas fa-calendar"></i> Jadwal
+            </button>
+        </div>
+
+        <!-- LOADING -->
+        <div class="loading" id="loading" style="display: none;">
+            <div class="spinner"></div>
+            <p>Loading data dari server...</p>
+        </div>
+
+        <!-- HOME TAB -->
+        <div id="homeTab" class="tab-content active">
+            <div class="section-header">
+                <h2><i class="fas fa-newspaper"></i> Rekomendasi</h2>
+                <span class="update-time" id="homeUpdateTime"></span>
+            </div>
+            <div class="anime-grid" id="homeResults"></div>
+        </div>
+
+        <!-- ONGOING TAB -->
+        <div id="ongoingTab" class="tab-content">
+            <div class="section-header">
+                <h2><i class="fas fa-fire"></i> Ongoing Anime</h2>
+                <span class="update-time" id="ongoingUpdateTime"></span>
+            </div>
+            <div class="anime-grid" id="ongoingResults"></div>
+            <div class="pagination" id="ongoingPagination"></div>
+        </div>
+
+        <!-- GENRES TAB -->
+        <div id="genresTab" class="tab-content">
+            <div class="section-header">
+                <h2><i class="fas fa-tags"></i> Genre</h2>
+            </div>
+            <div class="genres-grid" id="genresList"></div>
+        </div>
+
+        <!-- SCHEDULE TAB - OTOMATIS DARI DATA ONGOING -->
+        <div id="scheduleTab" class="tab-content">
+            <div class="section-header">
+                <h2><i class="fas fa-calendar"></i> Jadwal Rilis (Dari Data Ongoing)</h2>
+                <span class="update-time" id="scheduleUpdateTime"></span>
+            </div>
+            <div class="schedule-grid" id="scheduleGrid">
+                <!-- Akan diisi otomatis oleh JavaScript dari data ongoing -->
+            </div>
+            <p class="schedule-note">*Jadwal berdasarkan data dari sumber scraping. Update real-time.</p>
+        </div>
+    </div>
+
+    <!-- MODALS -->
+    <div id="animeModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <div id="modalContent"></div>
+        </div>
+    </div>
+
+    <div id="episodeModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeEpisodeModal()">&times;</span>
+            <div id="episodeContent"></div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+    <script src="script.js"></script>
+    <script>
+        AOS.init({
+            duration: 800,
+            once: true
+        });
+        
+        window.onscroll = function() {
+            const btn = document.getElementById('floatBtn');
+            if (document.body.scrollTop > 300 || document.documentElement.scrollTop > 300) {
+                btn.style.display = 'flex';
+            } else {
+                btn.style.display = 'none';
+            }
+        };
+        
+        function scrollToTop() {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>
