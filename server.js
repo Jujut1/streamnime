@@ -1,256 +1,254 @@
 // ============================================
-// STREAMNIME - MAIN SERVER (PTERODACTYL READY)
+// STREAMNIME - TERMUX EDITION
+// Dengan Anime Scraper Terintegrasi
 // ============================================
 
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const morgan = require('morgan');
-const compression = require('compression');
-const RateLimit = require('express-rate-limit');
+const os = require('os');
 const animeScraper = require('./anime-scraper');
-require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 3000; // BACA DARI ENVIRONMENT PTERODACTYL
-const HOST = '0.0.0.0'; // WAJIB untuk Pterodactyl
+const PORT = 8010; // Port untuk Termux
+const HOST = '0.0.0.0';
 
 // ============================================
 // MIDDLEWARE
 // ============================================
-app.use(compression()); // Kompres response biar cepat
-app.use(cors({
-    origin: '*',
-    methods: ['GET', 'POST'],
-    allowedHeaders: ['Content-Type']
-}));
+app.use(cors());
 app.use(express.json());
-app.use(morgan('combined')); // Logging
-
-// Rate limiting - 100 request per 15 menit
-const limiter = RateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
-    message: { error: "Terlalu banyak request, coba lagi nanti" }
-});
-app.use('/api/', limiter);
-
-// Serve static files dari frontend
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'frontend')));
+
+// Logging
+app.use((req, res, next) => {
+    console.log(`[${new Date().toLocaleTimeString()}] ${req.method} ${req.url}`);
+    next();
+});
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+
+function getLocalIP() {
+    const interfaces = os.networkInterfaces();
+    for (const name in interfaces) {
+        for (const iface of interfaces[name]) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+                return iface.address;
+            }
+        }
+    }
+    return '127.0.0.1';
+}
 
 // ============================================
 // API ENDPOINTS
 // ============================================
 
-// Cek status server
+// Status Termux
 app.get('/api/status', (req, res) => {
     res.json({
         status: 'online',
-        server: 'StreamNime',
-        version: '1.0.0',
-        uptime: process.uptime(),
-        timestamp: new Date().toISOString(),
+        platform: 'Termux',
+        version: '2.0.0',
+        source: animeScraper.source,
+        localIP: getLocalIP(),
         port: PORT,
-        node: process.version
+        uptime: process.uptime(),
+        memory: process.memoryUsage(),
+        timestamp: new Date().toISOString()
     });
 });
 
-// Search anime
+// Search Anime
 app.get('/api/search', async (req, res) => {
     try {
         const { q, source = 'otakudesu' } = req.query;
         
         if (!q) {
-            return res.status(400).json({ error: 'Parameter q wajib diisi' });
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Parameter q wajib diisi' 
+            });
         }
         
-        console.log(`[SEARCH] Query: ${q}, Source: ${source}`);
+        console.log(`[SEARCH] Mencari: ${q} dari ${source}`);
         animeScraper.setSource(source);
         const result = await animeScraper.searchAnime(q);
-        
         res.json(result);
+        
     } catch (error) {
         console.error('[SEARCH ERROR]', error.message);
         res.status(500).json({ 
             success: false, 
-            error: 'Gagal mencari anime',
-            details: error.message 
+            error: error.message 
         });
     }
 });
 
-// Get ongoing anime
+// Ongoing Anime
 app.get('/api/ongoing', async (req, res) => {
     try {
         const { page = 1, source = 'otakudesu' } = req.query;
         
-        console.log(`[ONGOING] Page: ${page}, Source: ${source}`);
+        console.log(`[ONGOING] Page ${page} dari ${source}`);
         animeScraper.setSource(source);
         const result = await animeScraper.getOngoingAnime(parseInt(page));
-        
         res.json(result);
+        
     } catch (error) {
         console.error('[ONGOING ERROR]', error.message);
         res.status(500).json({ 
             success: false, 
-            error: 'Gagal mengambil ongoing anime' 
+            error: error.message 
         });
     }
 });
 
-// Get anime detail
+// Anime Detail
 app.get('/api/anime', async (req, res) => {
     try {
         const { url } = req.query;
         
         if (!url) {
-            return res.status(400).json({ error: 'Parameter url wajib diisi' });
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Parameter url wajib diisi' 
+            });
         }
         
-        console.log(`[DETAIL] Anime URL: ${url.substring(0, 50)}...`);
+        console.log(`[DETAIL] Mengambil detail dari: ${url.substring(0, 50)}...`);
         const result = await animeScraper.getAnimeDetail(url);
-        
         res.json(result);
+        
     } catch (error) {
         console.error('[DETAIL ERROR]', error.message);
         res.status(500).json({ 
             success: false, 
-            error: 'Gagal mengambil detail anime' 
+            error: error.message 
         });
     }
 });
 
-// Get episode stream
+// Episode Stream
 app.get('/api/episode', async (req, res) => {
     try {
         const { url } = req.query;
         
         if (!url) {
-            return res.status(400).json({ error: 'Parameter url wajib diisi' });
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Parameter url wajib diisi' 
+            });
         }
         
-        console.log(`[EPISODE] Episode URL: ${url.substring(0, 50)}...`);
+        console.log(`[EPISODE] Mengambil stream dari: ${url.substring(0, 50)}...`);
         const result = await animeScraper.getEpisodeStream(url);
-        
         res.json(result);
+        
     } catch (error) {
         console.error('[EPISODE ERROR]', error.message);
         res.status(500).json({ 
             success: false, 
-            error: 'Gagal mengambil link streaming' 
+            error: error.message 
         });
     }
 });
 
-// Get genres
+// Genres
 app.get('/api/genres', async (req, res) => {
     try {
         const { source = 'otakudesu' } = req.query;
         
-        console.log(`[GENRES] Source: ${source}`);
+        console.log(`[GENRES] Mengambil genre dari ${source}`);
         animeScraper.setSource(source);
         const result = await animeScraper.getGenres();
-        
         res.json(result);
+        
     } catch (error) {
         console.error('[GENRES ERROR]', error.message);
         res.status(500).json({ 
             success: false, 
-            error: 'Gagal mengambil genre' 
+            error: error.message 
         });
     }
 });
 
-// Get anime by genre
-app.get('/api/genre', async (req, res) => {
-    try {
-        const { url, page = 1 } = req.query;
-        
-        if (!url) {
-            return res.status(400).json({ error: 'Parameter url wajib diisi' });
-        }
-        
-        console.log(`[GENRE] URL: ${url.substring(0, 50)}..., Page: ${page}`);
-        const result = await animeScraper.getAnimeByGenre(url, parseInt(page));
-        
-        res.json(result);
-    } catch (error) {
-        console.error('[GENRE ERROR]', error.message);
-        res.status(500).json({ 
-            success: false, 
-            error: 'Gagal mengambil anime berdasarkan genre' 
-        });
-    }
-});
-
-// Change source
+// Ganti Source
 app.post('/api/source', (req, res) => {
     try {
         const { source } = req.body;
         
         if (!source) {
-            return res.status(400).json({ error: 'Parameter source wajib diisi' });
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Parameter source wajib diisi' 
+            });
         }
         
         const success = animeScraper.setSource(source);
         
         if (success) {
-            res.json({ success: true, source, message: `Source changed to ${source}` });
+            res.json({ 
+                success: true, 
+                source, 
+                message: `Source diganti ke ${source}` 
+            });
         } else {
-            res.status(400).json({ error: 'Source tidak valid' });
+            res.status(400).json({ 
+                success: false, 
+                error: 'Source tidak valid' 
+            });
         }
+        
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
     }
 });
 
-// ============================================
-// FALLBACK: Semua route lain ke frontend
-// ============================================
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'frontend', 'index.html'));
-});
-
-// ============================================
-// ERROR HANDLER
-// ============================================
-app.use((err, req, res, next) => {
-    console.error('[SERVER ERROR]', err.stack);
-    res.status(500).json({ 
-        success: false, 
-        error: 'Internal server error',
-        message: err.message 
+// List Sources
+app.get('/api/sources', (req, res) => {
+    res.json({
+        success: true,
+        sources: animeScraper.getSources()
     });
 });
 
 // ============================================
-// START SERVER (PTERODACTYL COMPATIBLE)
+// SERVE FRONTEND
 // ============================================
-app.listen(PORT, HOST, () => {
-    console.log(`
-╔══════════════════════════════════════════════════════════╗
-║                                                          ║
-║   🎬 STREAMNIME - READY FOR PTERODACTYL                 ║
-║                                                          ║
-║   📡 Server: http://${HOST}:${PORT}                         ║
-║   📁 Frontend: /frontend                                 ║
-║   🔧 Node Version: ${process.version}                       ║
-║   ⏰ Started: ${new Date().toLocaleString('id-ID')}          ║
-║                                                          ║
-║   🚀 API Endpoints:                                      ║
-║      • GET  /api/status                                  ║
-║      • GET  /api/search?q=naruto                         ║
-║      • GET  /api/ongoing                                  ║
-║      • GET  /api/anime?url=...                            ║
-║      • GET  /api/episode?url=...                          ║
-║      • GET  /api/genres                                   ║
-║                                                          ║
-╚══════════════════════════════════════════════════════════╝
-    `);
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'frontend', 'index.html'));
 });
 
-// Graceful shutdown
-process.on('SIGINT', () => {
-    console.log('\n📴 Shutting down server...');
-    process.exit();
+// ============================================
+// START SERVER
+// ============================================
+app.listen(PORT, HOST, () => {
+    const localIP = getLocalIP();
+    
+    console.log('\x1b[36m%s\x1b[0m', '╔══════════════════════════════════════════════╗');
+    console.log('\x1b[36m%s\x1b[0m', '║     📱 STREAMNIME - TERMUX EDITION          ║');
+    console.log('\x1b[36m%s\x1b[0m', '╠══════════════════════════════════════════════╣');
+    console.log('\x1b[32m%s\x1b[0m', '║  ✅ SERVER BERHASIL JALAN!                   ║');
+    console.log('\x1b[36m%s\x1b[0m', '╠══════════════════════════════════════════════╣');
+    console.log('\x1b[33m%s\x1b[0m', `║  📍 Localhost: http://localhost:${PORT}       `);
+    console.log('\x1b[33m%s\x1b[0m', `║  📍 Network IP: http://${localIP}:${PORT}      `);
+    console.log('\x1b[33m%s\x1b[0m', `║  🔧 Source: ${animeScraper.source}                `);
+    console.log('\x1b[36m%s\x1b[0m', '╠══════════════════════════════════════════════╣');
+    console.log('\x1b[0m%s\x1b[0m', '║  📡 API Endpoints:                            ║');
+    console.log('\x1b[0m%s\x1b[0m', '║     • GET /api/status                        ║');
+    console.log('\x1b[0m%s\x1b[0m', '║     • GET /api/search?q=naruto               ║');
+    console.log('\x1b[0m%s\x1b[0m', '║     • GET /api/ongoing                       ║');
+    console.log('\x1b[0m%s\x1b[0m', '║     • GET /api/genres                        ║');
+    console.log('\x1b[0m%s\x1b[0m', '║     • GET /api/sources                       ║');
+    console.log('\x1b[36m%s\x1b[0m', '╠══════════════════════════════════════════════╣');
+    console.log('\x1b[31m%s\x1b[0m', '║  ⏹️  Stop: Ctrl+C                            ║');
+    console.log('\x1b[36m%s\x1b[0m', '╚══════════════════════════════════════════════╝');
+    console.log('\n📱 Buka di browser HP: \x1b[4m\x1b[34mhttp://' + localIP + ':' + PORT + '\x1b[0m\n');
 });
