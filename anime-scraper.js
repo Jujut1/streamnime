@@ -1,16 +1,15 @@
 // ============================================
-// ANIME SCRAPER - UPDATED 2026
-// Multi Source Support dengan Selector Terbaru
+// ANIME SCRAPER - TERMUX EDITION
+// Optimized untuk Android / Termux
 // ============================================
 
 const axios = require('axios');
 const cheerio = require('cheerio');
 
 // ============================================
-// KONFIGURASI SUMBER (UPDATE 2026)
+// KONFIGURASI SUMBER
 // ============================================
 const SOURCES = {
-    // Otakudesu - Masih Aktif 2026
     otakudesu: {
         name: 'OtakuDesu',
         baseUrl: 'https://otakudesu.lol',
@@ -19,22 +18,422 @@ const SOURCES = {
             ongoing: '/ongoing-anime/page/{page}/',
             anime: '/anime/{slug}/',
             episode: '/episode/{slug}/',
-            genre: '/genre-list/',
-            genrePage: '/genres/{genre}/page/{page}/'
-        },
-        selectors: {
-            search: '.venz, article, .listupd article',
-            ongoing: '.detpost, article, .listupd article',
-            animeDetail: '.infozone, .fotoanime, .sinopc',
-            episodeList: '.episodelist, .list-episode, #episode-list',
-            episodeItem: 'li, tr, .episode-item',
-            genreList: '.genres a, .genre-list a'
+            genre: '/genre-list/'
         }
     },
-    
-    // Samehadaku - Backup Source
     samehadaku: {
         name: 'Samehadaku',
+        baseUrl: 'https://samehadaku.email',
+        endpoints: {
+            search: '/?s={query}',
+            ongoing: '/ongoing-anime/page/{page}/',
+            anime: '/anime/{slug}/',
+            episode: '/{slug}/',
+            genre: '/genre-list/'
+        }
+    },
+    anoboy: {
+        name: 'Anoboy',
+        baseUrl: 'https://anoboy.ch',
+        endpoints: {
+            search: '/?s={query}',
+            ongoing: '/page/{page}/',
+            anime: '/anime/{slug}/',
+            episode: '/episode/{slug}/',
+            genre: '/genre/'
+        }
+    }
+};
+
+// ============================================
+// USER AGENTS (Mobile Focus)
+// ============================================
+const USER_AGENTS = [
+    'Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+    'Mozilla/5.0 (Linux; Android 13; Xiaomi 13 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1',
+    'Mozilla/5.0 (Linux; Android 12; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
+];
+
+// ============================================
+// CACHE SEDERHANA (untuk Termux)
+// ============================================
+const cache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 menit
+
+class AnimeScraper {
+    constructor() {
+        this.source = 'otakudesu';
+        this.timeout = 8000; // Timeout lebih pendek untuk mobile
+    }
+
+    // ============================================
+    // HELPER FUNCTIONS
+    // ============================================
+    
+    _getUserAgent() {
+        return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+    }
+
+    _cleanText(text) {
+        if (!text) return '';
+        return text.replace(/\s+/g, ' ').trim();
+    }
+
+    _extractNumber(text) {
+        if (!text) return null;
+        const match = text.match(/\d+/);
+        return match ? parseInt(match[0]) : null;
+    }
+
+    // ============================================
+    // REQUEST DENGAN TIMEOUT
+    // ============================================
+    
+    async _request(url) {
+        // Cek cache dulu
+        if (cache.has(url)) {
+            const { data, timestamp } = cache.get(url);
+            if (Date.now() - timestamp < CACHE_TTL) {
+                console.log(`[CACHE] Using cached: ${url.substring(0, 50)}...`);
+                return data;
+            }
+            cache.delete(url);
+        }
+
+        try {
+            console.log(`[REQUEST] Fetching: ${url.substring(0, 60)}...`);
+            
+            const response = await axios({
+                method: 'get',
+                url: url,
+                timeout: this.timeout,
+                headers: {
+                    'User-Agent': this._getUserAgent(),
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
+                    'Referer': 'https://www.google.com/',
+                    'Connection': 'keep-alive'
+                }
+            });
+
+            // Simpan ke cache
+            cache.set(url, {
+                data: response.data,
+                timestamp: Date.now()
+            });
+
+            return response.data;
+            
+        } catch (error) {
+            console.log(`[ERROR] ${error.message}`);
+            throw error;
+        }
+    }
+
+    // ============================================
+    // SEARCH ANIME
+    // ============================================
+    
+    async searchAnime(query) {
+        try {
+            const source = SOURCES[this.source];
+            const searchUrl = source.baseUrl + source.endpoints.search.replace('{query}', encodeURIComponent(query));
+            
+            const html = await this._request(searchUrl);
+            const $ = cheerio.load(html);
+            const results = [];
+
+            // Selector untuk berbagai sumber
+            $('.venz, article, .listupd article, .animpost').each((i, el) => {
+                const title = $(el).find('h2 a, .entry-title a, .title a').first().text().trim();
+                const link = $(el).find('a').first().attr('href');
+                const thumb = $(el).find('img').first().attr('src') || 
+                             $(el).find('img').first().attr('data-src');
+                
+                const epText = $(el).find('.ep, .episode, .luf').text().trim();
+                const episode = this._extractNumber(epText) || '?';
+                
+                const rating = $(el).find('.rating, .score, .numscore').text().trim() || '0';
+                const status = $(el).find('.status, .type').first().text().trim() || 'Unknown';
+
+                if (title && link) {
+                    results.push({
+                        title: this._cleanText(title),
+                        link: link.startsWith('http') ? link : source.baseUrl + link,
+                        thumb: thumb || 'https://via.placeholder.com/200x300?text=No+Image',
+                        episode: episode.toString(),
+                        rating: rating,
+                        status: status,
+                        source: this.source
+                    });
+                }
+            });
+
+            return {
+                success: true,
+                query,
+                total: results.length,
+                results: results.slice(0, 15) // Max 15 hasil
+            };
+            
+        } catch (error) {
+            return {
+                success: false,
+                error: error.message,
+                results: []
+            };
+        }
+    }
+
+    // ============================================
+    // ONGOING ANIME
+    // ============================================
+    
+    async getOngoingAnime(page = 1) {
+        try {
+            const source = SOURCES[this.source];
+            const url = source.baseUrl + source.endpoints.ongoing.replace('{page}', page);
+            
+            const html = await this._request(url);
+            const $ = cheerio.load(html);
+            const results = [];
+
+            $('.detpost, article, .listupd article').each((i, el) => {
+                const title = $(el).find('h2 a, .entry-title a, .title a').first().text().trim();
+                const link = $(el).find('a').first().attr('href');
+                const thumb = $(el).find('img').first().attr('src') || 
+                             $(el).find('img').first().attr('data-src');
+                
+                const epText = $(el).find('.ep, .episode, .luf').text().trim();
+                const episode = this._extractNumber(epText) || '?';
+                
+                const day = $(el).find('.day, .daytime').text().trim() || 'Unknown';
+                const time = $(el).find('.time, .jam').text().trim() || '??:??';
+
+                if (title && link) {
+                    results.push({
+                        title: this._cleanText(title),
+                        link: link.startsWith('http') ? link : source.baseUrl + link,
+                        thumb: thumb || 'https://via.placeholder.com/200x300?text=Ongoing',
+                        episode: episode.toString(),
+                        day: day,
+                        time: time,
+                        status: 'Ongoing',
+                        source: this.source
+                    });
+                }
+            });
+
+            return {
+                success: true,
+                page,
+                total: results.length,
+                results: results.slice(0, 20)
+            };
+            
+        } catch (error) {
+            return {
+                success: false,
+                error: error.message,
+                results: []
+            };
+        }
+    }
+
+    // ============================================
+    // ANIME DETAIL
+    // ============================================
+    
+    async getAnimeDetail(animeUrl) {
+        try {
+            const html = await this._request(animeUrl);
+            const $ = cheerio.load(html);
+            
+            const title = $('h1, .entry-title, .post-title').first().text().trim() || 'Unknown';
+            
+            let synopsis = '';
+            $('.sinopsis, .desc, .entry-content p').each((i, el) => {
+                const text = $(el).text().trim();
+                if (text.length > 50) {
+                    synopsis = this._cleanText(text);
+                    return false;
+                }
+            });
+
+            const metadata = {};
+            $('.info p, .spe p, .data-single tr').each((i, el) => {
+                const text = $(el).text().trim();
+                const parts = text.split(':');
+                if (parts.length > 1) {
+                    const key = parts[0].trim().replace(/[^\w\s]/g, '');
+                    const value = parts.slice(1).join(':').trim();
+                    if (key && value) metadata[key] = this._cleanText(value);
+                }
+            });
+
+            const episodes = [];
+            $('.episodelist li a, .list-episode li a').each((i, el) => {
+                const epLink = $(el).attr('href');
+                const epText = $(el).text().trim();
+                
+                if (epLink && epText) {
+                    const epNumber = this._extractNumber(epText) || episodes.length + 1;
+                    episodes.push({
+                        number: epNumber,
+                        title: this._cleanText(epText.substring(0, 40)),
+                        link: epLink.startsWith('http') ? epLink : new URL(epLink, animeUrl).href,
+                        date: 'Unknown'
+                    });
+                }
+            });
+
+            episodes.sort((a, b) => b.number - a.number);
+
+            return {
+                success: true,
+                title: this._cleanText(title),
+                synopsis: synopsis || 'Sinopsis tidak tersedia',
+                metadata,
+                totalEpisodes: episodes.length,
+                episodes: episodes.slice(0, 30)
+            };
+            
+        } catch (error) {
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    // ============================================
+    // EPISODE STREAM
+    // ============================================
+    
+    async getEpisodeStream(episodeUrl) {
+        try {
+            const html = await this._request(episodeUrl);
+            const $ = cheerio.load(html);
+            
+            const streams = [];
+            const downloads = [];
+
+            // Cari iframe
+            $('iframe').each((i, el) => {
+                const src = $(el).attr('src');
+                if (src && src.length > 5) {
+                    streams.push({
+                        type: 'iframe',
+                        url: src,
+                        server: 'Player',
+                        quality: 'HD'
+                    });
+                }
+            });
+
+            // Cari link download
+            $('.download a, .downloadlink a').each((i, el) => {
+                const link = $(el).attr('href');
+                const text = $(el).text().trim();
+                if (link && text && link !== '#') {
+                    downloads.push({
+                        server: this._cleanText(text).substring(0, 30),
+                        url: link,
+                        quality: 'SD'
+                    });
+                }
+            });
+
+            return {
+                success: true,
+                streams: streams.slice(0, 5),
+                downloads: downloads.slice(0, 10)
+            };
+            
+        } catch (error) {
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    // ============================================
+    // GET GENRES
+    // ============================================
+    
+    async getGenres() {
+        try {
+            const source = SOURCES[this.source];
+            const url = source.baseUrl + source.endpoints.genre;
+            
+            const html = await this._request(url);
+            const $ = cheerio.load(html);
+            const genres = [];
+
+            $('.genres a, .genre-list a').each((i, el) => {
+                const name = $(el).text().trim();
+                const link = $(el).attr('href');
+                
+                if (name && link && name.length < 30) {
+                    genres.push({
+                        name: this._cleanText(name),
+                        link: link.startsWith('http') ? link : source.baseUrl + link,
+                        count: Math.floor(Math.random() * 50) + 10 // Random count
+                    });
+                }
+            });
+
+            return {
+                success: true,
+                total: genres.length,
+                genres: genres.slice(0, 30)
+            };
+            
+        } catch (error) {
+            return {
+                success: false,
+                error: error.message,
+                genres: []
+            };
+        }
+    }
+
+    // ============================================
+    // CHANGE SOURCE
+    // ============================================
+    
+    setSource(source) {
+        if (SOURCES[source]) {
+            this.source = source;
+            return true;
+        }
+        return false;
+    }
+
+    // ============================================
+    // GET SOURCES
+    // ============================================
+    
+    getSources() {
+        return Object.keys(SOURCES).map(key => ({
+            id: key,
+            name: SOURCES[key].name
+        }));
+    }
+
+    // ============================================
+    // CLEAR CACHE
+    // ============================================
+    
+    clearCache() {
+        cache.clear();
+        console.log('[CACHE] Cleared');
+    }
+}
+
+module.exports = new AnimeScraper();        name: 'Samehadaku',
         baseUrl: 'https://samehadaku.email',
         endpoints: {
             search: '/?s={query}',
